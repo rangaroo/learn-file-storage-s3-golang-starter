@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"net/http"
 	"io"
+	"encoding/base64"
 
-	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
+	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 )
 
 func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Request) {
@@ -63,17 +64,13 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	videoThumbnails[videoID] = thumbnail{
-		data:      data,
-		mediaType: mediaType,
-	}
+	encoded := base64.StdEncoding.EncodeToString(data)
+	url := fmt.Sprintf("data:%s;base64,%s", mediaType, encoded)
 
-	url := fmt.Sprintf("http://localhost:%s/api/thumbnails/%v", cfg.port, videoID)
 	v.ThumbnailURL = &url
 
 	err = cfg.db.UpdateVideo(v)
 	if err != nil {
-		delete(videoThumbnails, videoID)
 		respondWithError(w, http.StatusInternalServerError, "Could't update video thumbnail", err)
 		return
 	}
