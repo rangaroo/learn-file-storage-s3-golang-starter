@@ -2,12 +2,12 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"io"
-	"encoding/base64"
+    "os"
+	"net/http"
 
-	"github.com/google/uuid"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
+	"github.com/google/uuid"
 )
 
 func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Request) {
@@ -42,15 +42,23 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 	defer file.Close()
 
-	mediaType:= header.Header.Get("Content-Type")
+	mediaType := header.Header.Get("Content-Type")
 	if mediaType == "" {
-		respondWithError(w, http.StatusBadRequest, "Missing 'Content-Type header for thumbnail", nil)
+		respondWithError(w, http.StatusBadRequest, "Missing 'Content-Type' header for thumbnail", nil)
 		return
 	}
 
-	data, err := io.ReadAll(file)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Could't read the file", err)
+    assetPath := getAssetPath(videoID, mediaType)
+    assetDiskPath := cfg.getAssetDiskPath(assetPath)
+
+    dst, err := os.Create(assetDiskPath)
+    if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could't create file on the server", nil)
+		return
+    }
+    defer dst.Close()
+    if _, err = io.Copy(dst, file); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error saving file", err)
 		return
 	}
 
@@ -64,9 +72,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	encoded := base64.StdEncoding.EncodeToString(data)
-	url := fmt.Sprintf("data:%s;base64,%s", mediaType, encoded)
-
+	url := cfg.getAssetURL(assetPath)
 	v.ThumbnailURL = &url
 
 	err = cfg.db.UpdateVideo(v)
