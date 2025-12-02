@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 	"io"
-    "os"
+	"mime"
 	"net/http"
-    "mime"
+	"os"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -44,25 +44,25 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	defer file.Close()
 
 	mediaType, _, err := mime.ParseMediaType(header.Header.Get("Content-Type"))
-    if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Could't parse mediatype", nil)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Could't parse mediatype", nil)
 		return
-    }
-	if mediaType != "image/jpeg" || mediaType != "image/png" {
+	}
+	if mediaType != "image/jpeg" && mediaType != "image/png" {
 		respondWithError(w, http.StatusBadRequest, "Invalid file format for thumbnail", nil)
 		return
 	}
 
-    assetPath := getAssetPath(videoID, mediaType)
-    assetDiskPath := cfg.getAssetDiskPath(assetPath)
+	assetPath := getAssetPath(mediaType)
+	assetDiskPath := cfg.getAssetDiskPath(assetPath)
 
-    dst, err := os.Create(assetDiskPath)
-    if err != nil {
+	dst, err := os.Create(assetDiskPath)
+	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Could't create file on the server", nil)
 		return
-    }
-    defer dst.Close()
-    if _, err = io.Copy(dst, file); err != nil {
+	}
+	defer dst.Close()
+	if _, err = io.Copy(dst, file); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Error saving file", err)
 		return
 	}
