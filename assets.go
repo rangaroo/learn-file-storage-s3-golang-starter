@@ -1,12 +1,12 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-    "crypto/rand"
-    "encoding/base64"
 )
 
 func (cfg apiConfig) ensureAssetsDir() error {
@@ -17,12 +17,12 @@ func (cfg apiConfig) ensureAssetsDir() error {
 }
 
 func getAssetPath(mediaType string) string {
-    b := make([]byte, 32)
-    _, err := rand.Read(b)
-    if err != nil {
-        panic("failed to generate random bytes")
-    }
-    base64Path := base64.RawURLEncoding.EncodeToString(b)
+	b := make([]byte, 32)
+	_, err := rand.Read(b)
+	if err != nil {
+		panic("failed to generate random bytes")
+	}
+	base64Path := base64.RawURLEncoding.EncodeToString(b)
 
 	ext := mediaTypeToExt(mediaType)
 	return fmt.Sprintf("%s%s", string(base64Path), ext)
@@ -34,6 +34,10 @@ func (cfg apiConfig) getAssetDiskPath(assetPath string) string {
 
 func (cfg apiConfig) getAssetURL(assetPath string) string {
 	return fmt.Sprintf("http://localhost:%s/assets/%s", cfg.port, assetPath)
+}
+
+func (cfg apiConfig) getVideoURL(key string) string {
+	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, key)
 }
 
 func mediaTypeToExt(mediaType string) string {
