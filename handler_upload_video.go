@@ -1,14 +1,14 @@
 package main
 
 import (
-	"net/http"
 	"fmt"
-	"mime"
-	"os"
 	"io"
-	"context"
+	"mime"
+	"net/http"
+	"os"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
 )
@@ -56,43 +56,58 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 
 	mediaType, _, err := mime.ParseMediaType(header.Header.Get("Content-Type"))
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Could't parse mediatype", nil)
+		respondWithError(w, http.StatusBadRequest, "Could't parse mediatype", err)
 		return
 	}
 	if mediaType != "video/mp4" {
-		respondWithError(w, http.StatusBadRequest, "Invalid file format for video", nil)
+		respondWithError(w, http.StatusBadRequest, "Invalid file format for video", err)
 		return
 	}
 
-	tempFile, err := os.CreateTemp("", "tubely-upload.mp4")
+	tempFile, err := os.CreateTemp("", "tubely-upload.*.mp4")
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Could't create temporary file", nil)
+		respondWithError(w, http.StatusInternalServerError, "Could't create temporary file", err)
 		return
 	}
 	defer os.Remove(tempFile.Name())
 	defer tempFile.Close()
 
 	if _, err := io.Copy(tempFile, file); err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Error copying to temporary file", nil)
+		respondWithError(w, http.StatusInternalServerError, "Error copying to temporary file", err)
 		return
 	}
 
 	_, err = tempFile.Seek(0, io.SeekStart)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Could't reset temp file's pointer", nil)
+		respondWithError(w, http.StatusInternalServerError, "Could't reset temp file's pointer", err)
 		return
 	}
 
-	assetPath := getAssetPath(mediaType)
-	input := s3.PutObjectInput{
-		Bucket:      &cfg.s3Bucket,
-		Key:         &assetPath,
-		Body:        tempFile,
-		ContentType: &mediaType,
-	}
-	_, err = cfg.s3Client.PutObject(context.Background(), &input)
+	ratio, err := getVideoAspectRatio(tempFile.Name())
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Could't put the video into S3", nil)
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Could't get the ratio of the video: %v", err), err)
+		return
+	}
+
+	prefix := ""
+	if ratio == "16:9" {
+		prefix = "landscape"
+	} else if ratio == "9:16" {
+		prefix = "portrait"
+	} else {
+		prefix = "other"
+	}
+
+	assetPath := prefix + "/" + getAssetPath(mediaType)
+	input := s3.PutObjectInput{
+		Bucket:      aws.String(cfg.s3Bucket),
+		Key:         aws.String(assetPath),
+		Body:        tempFile,
+		ContentType: aws.String(mediaType),
+	}
+	_, err = cfg.s3Client.PutObject(r.Context(), &input)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could't put the video into S3", err)
 		return
 	}
 
@@ -101,7 +116,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 
 	err = cfg.db.UpdateVideo(v)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Could't update video url", err)
+		respondWithError(w, http.StatusInternalServerError, "Could't update video", err)
 		return
 	}
 

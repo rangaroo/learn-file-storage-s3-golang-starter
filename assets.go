@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -14,6 +17,33 @@ func (cfg apiConfig) ensureAssetsDir() error {
 		return os.Mkdir(cfg.assetsRoot, 0755)
 	}
 	return nil
+}
+
+func getVideoAspectRatio(filePath string) (string, error) {
+	cmd := exec.Command("ffprobe", "-v", "error", "-print_format", "json", "-show_streams", filePath)
+
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
+	if err != nil {
+		return "", fmt.Errorf("Failed to run the command: %v", err)
+	}
+
+	var cmdOutput output
+	err = json.Unmarshal(out.Bytes(), &cmdOutput)
+	if err != nil {
+		return "", fmt.Errorf("error unmarshaling the cmd output: %v", err)
+	}
+
+	eps := 0.01
+	ratio := float64(cmdOutput.Streams[0].Width) / float64(cmdOutput.Streams[0].Height)
+	if 16.0/9.0-eps <= ratio && ratio <= 16.0/9.0+eps {
+		return "16:9", nil
+	} else if 9.0/16.0-eps <= ratio && ratio <= 9.0/16.0+eps {
+		return "9:16", nil
+	} else {
+		return "other", nil
+	}
 }
 
 func getAssetPath(mediaType string) string {
@@ -46,4 +76,11 @@ func mediaTypeToExt(mediaType string) string {
 		return ".bin"
 	}
 	return "." + parts[1]
+}
+
+type output struct {
+	Streams []struct {
+		Width              int    `json:"width,omitempty"`
+		Height             int    `json:"height,omitempty"`
+    }
 }
